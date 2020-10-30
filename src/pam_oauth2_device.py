@@ -1,10 +1,16 @@
+import site
+site.main()
+
 import requests
 import time
 import qrcode
 import yaml
+import syslog
 
 
 def pam_sm_authenticate(pamh, flags, argv):
+
+    syslog.syslog('pam_sm_authenticate')
 
     try:
         args = parse_args(argv)
@@ -17,17 +23,30 @@ def pam_sm_authenticate(pamh, flags, argv):
 
         token_response = poll_for_token(pamh, config, authorization)
 
-        userinfo = make_userinfo_request(config, token_response)
+        print_token(pamh, config, token_response)
 
-        authorize_user(pamh, config, userinfo)
+        # userinfo = make_userinfo_request(config, token_response)
+
+        # authorize_user(pamh, config, userinfo)
 
         return pamh.PAM_SUCCESS
 
     except BaseException as e:
         print e
+        return pamh.PAM_SUCCESS
+
+def print_token(pamh, config, token_response):
+
+    syslog.syslog('print_token')
+
+    send(pamh, 'bearer_token:'+str(token_response['access_token']))
+    raise Oauth2Exception('Display token', str(token_response['access_token']))
 
 
 def parse_args(argv):
+
+    syslog.syslog('parse_args')
+    
     args = {
         'config_file': argv[1] if len(argv) > 1 else None
     }
@@ -35,19 +54,23 @@ def parse_args(argv):
 
 
 def load_config(file_name):
+
+    syslog.syslog('load_config')
+    
     if file_name is None:
-        file_name = '/etc/pam_oauth2_device/config.yml'
+        file_name = '/lib/security/config.yml'
     with open(file_name, 'r') as stream:
         return yaml.safe_load(stream)
 
 
 def make_authorization_request(config):
+
+    syslog.syslog('make_authorization_request')
+    
     device_response = requests.post(
         config['oauth']['device_endpoint'],
-        data={
-            'client_id': config['oauth']['client']['id'],
-            'scope': ' '.join(config['oauth']['scope'])
-        }
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'},
+        data = 'client_id='+config['oauth']['client']['id']+'&client_secret='+config['oauth']['client']['secret']
     )
 
     if 'error' in device_response.json():
@@ -56,6 +79,9 @@ def make_authorization_request(config):
 
 
 def print_authentication_promt(pamh, config, authorization):
+
+    syslog.syslog('print_authentication_promt')
+    
     user_code = str(authorization['user_code'])
     url = str(authorization['verification_uri'])
     url_complete = url
@@ -67,6 +93,9 @@ def print_authentication_promt(pamh, config, authorization):
 
 
 def poll_for_token(pamh, config, authorization):
+
+    syslog.syslog('poll_for_token')
+    
 
     device_code = str(authorization['device_code'])
 
@@ -111,6 +140,9 @@ def poll_for_token(pamh, config, authorization):
 
 
 def make_userinfo_request(config, token_response):
+
+    syslog.syslog('make_userinfo_request')
+    
     userinfo_response = requests.get(
         config['oauth']['userinfo_endpoint'],
         headers={
@@ -125,6 +157,9 @@ def make_userinfo_request(config, token_response):
 
 
 def authorize_user(pamh, config, userinfo):
+
+    syslog.syslog('authorize_user')
+    
     sub = userinfo['sub']
 
     if sub not in config['users']:
@@ -144,6 +179,9 @@ def authorize_user(pamh, config, userinfo):
 
 
 def generate_qr(str, config):
+
+    syslog.syslog('generate_qr')
+    
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L)
     qr.add_data(str)
     qr.make()
@@ -155,6 +193,9 @@ def generate_qr(str, config):
 
 
 def generate_qr_small(modules, config):
+
+    syslog.syslog('generate_qr_small')
+    
     before_line = config['qr']['before_line']
     after_line = config['qr']['after_line']
 
@@ -180,6 +221,9 @@ def generate_qr_small(modules, config):
 
 
 def generate_qr_big(modules, config):
+
+    syslog.syslog('generate_qr_big')
+    
     before_line = config['qr']['before_line']
     after_line = config['qr']['after_line']
 
@@ -205,6 +249,9 @@ def generate_qr_big(modules, config):
 
 
 def qr_half_char(top, bot, config):
+
+    syslog.syslog('qr_half_char')
+    
     if config['qr']['inverse']:
         if top and bot:
             return '\033[40;97m\xE2\x96\x88\033[0m'
@@ -226,6 +273,9 @@ def qr_half_char(top, bot, config):
 
 
 def qr_full_char(filled, config):
+
+    syslog.syslog('qr_full_char')
+    
     if config['qr']['inverse']:
         if filled:
             return '\033[40;97m\xE2\x96\x88\xE2\x96\x88\033[0m'
@@ -239,10 +289,16 @@ def qr_full_char(filled, config):
 
 
 def send(pamh, msg):
+
+    syslog.syslog('send')
+    
     return pamh.conversation(pamh.Message(pamh.PAM_TEXT_INFO, msg))
 
 
 def prompt(pamh, msg):
+
+    syslog.syslog('prompt')
+    
     return pamh.conversation(pamh.Message(pamh.PAM_PROMPT_ECHO_ON, msg))
 
 
@@ -253,21 +309,35 @@ class Oauth2Exception(Exception):
 # Need to implement all methods to fulfill pam_python contract
 
 def pam_sm_setcred(pamh, flags, argv):
+
+    syslog.syslog('pam_sm_setcred')
+    
     return pamh.PAM_SUCCESS
 
 
 def pam_sm_acct_mgmt(pamh, flags, argv):
+
+    syslog.syslog('pam_sm_acct_mgmt')
+    
     return pamh.PAM_SUCCESS
 
 
 def pam_sm_open_session(pamh, flags, argv):
+
+    syslog.syslog('pam_sm_open_session')
+    
     return pamh.PAM_SUCCESS
 
 
 def pam_sm_close_session(pamh, flags, argv):
+
+    syslog.syslog('pam_sm_close_session')
+    
     return pamh.PAM_SUCCESS
 
 
 def pam_sm_chauthtok(pamh, flags, argv):
-    return pamh.PAM_SUCCESS
 
+    syslog.syslog('pam_sm_chauthtok')
+    
+    return pamh.PAM_SUCCESS
